@@ -34,7 +34,7 @@ class AgenticGemini:
         assistant = AssistantAgent('assistant', llm_config=self.llm_config)
         user_proxy = UserProxyAgent(
             'user_proxy',
-            code_execution_config={'work_dir': 'coding', 'use_docker': False}
+            code_execution_config={'work_dir': 'coding', 'use_docker': True}
         )
 
         response = user_proxy.run(assistant, message=prompt)
@@ -122,7 +122,7 @@ class AgenticGemini:
 
         planner_message = 'You are a classroom lesson planner. Given a topic, write a lesson plan for a fourth grade class.'
         reviewer_message = 'You are a classroom lesson reviewer. Compare the plan to the curriculum and suggest up to 3 improvements.'
-        teacher_message = 'You are an experienced classroom teacher. You don\'t prepare plans, you provide simple guidance to the planner to prepare a lesson plan on the key topic.'
+        teacher_message = 'You are an experienced classroom teacher. You don"t prepare plans, you provide simple guidance to the planner to prepare a lesson plan on the key topic.'
 
         lesson_planner = ConversableAgent(
             name='planner_agent',
@@ -149,10 +149,32 @@ class AgenticGemini:
 
         human_validator = UserProxyAgent(
             name='human_validator',
-            system_message='You are a human educator who provides final approval for lesson plans. Reply \'APPROVED\' to approve.',
+            system_message='You are a human educator who provides final approval for lesson plans. Reply "APPROVED" to approve.',
             description='Evaluates the proposed lesson plan and either approves it or requests revisions, before returning to the planner.',
             code_execution_config=False
         )
+
+        auto_selection = AutoPattern(
+            agents=[teacher, lesson_planner, lesson_reviewer],
+            initial_agent=teacher,
+            user_agent=human_validator,
+            group_manager_args={'name': 'group_manager', 'llm_config': self.llm_config},
+        )
+
+        response = run_group_chat(
+            pattern=auto_selection,
+            messages=prompt,
+            max_rounds=self.max_calls,
+        )
+        response.process()
+        self.logger.info('Final output:\n%s', response.summary)
+
+    @staticmethod
+    def _get_weekday(date_string: Annotated[str, 'Format: YYYY-MM-DD']) -> str:
+
+        date = datetime.strptime(date_string, '%Y-%m-%d')
+
+        return date.strftime('%A')
 
         auto_selection = AutoPattern(
             agents=[teacher, lesson_planner, lesson_reviewer],
@@ -181,7 +203,7 @@ class AgenticGemini:
         self.logger.info('Running: Tool Use Chat (Weekday Finder)')
         
         prompt = input(
-            'Enter your date question (e.g., \'I was born on 1995-03-25, what day was it?\'): '
+            'Enter your date question (e.g., "I was born on 1995-03-25, what day was it?"): '
         )
 
         date_agent = ConversableAgent(
@@ -214,7 +236,7 @@ class AgenticGemini:
 
 if __name__ == '__main__':
     CONFIG_PATH = 'config_path.json'
-    MAX_CALLS = 4
+    MAX_CALLS = 5
 
     try:
         with open(CONFIG_PATH, 'r') as f:
@@ -224,7 +246,7 @@ if __name__ == '__main__':
         gemini = AgenticGemini(config_path=config_list_path, max_calls=MAX_CALLS)
 
     except Exception as e:
-        print(f'Failed to initialize. Ensure \'{CONFIG_PATH}\' exists and is valid,')
+        print(f'Failed to initialize. Ensure "{CONFIG_PATH}" exists and is valid,')
         print('and that the path inside it is correct.')
         print(f'Error: {e}')
         exit()
