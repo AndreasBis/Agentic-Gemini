@@ -71,9 +71,16 @@ This is the recommended way to run the application. It ensures a consistent, sec
     ```
 
 3.  **Run the application:**
-    This command runs the app interactively. The `-v /var/run/docker.sock:/var/run/docker.sock` flag is **required**; it allows the agent inside the container to securely spawn *new* Docker containers for code execution.
+    This command runs the app interactively.
+
+    -   The `-v /var/run/docker.sock:/var/run/docker.sock` flag is **required**; it allows the agent inside the container to spawn new Docker containers for code execution.
+
+    -   The `-v "/your/target/directory":"/my_files"` flag is **required for Mode 5**. This mounts your local directory (e.g., `~/Documents`) into the container at `/my_files`, allowing the agent to find, read, edit, and run files.
+
+        -   **Note:** This flag must be **read-write** (without the `:ro` suffix). The agent needs write-access to this directory to create the temporary scripts it uses for code execution, even if you do not plan to edit your original files.
+
     ```bash
-    docker run -it --rm -v /var/run/docker.sock:/var/run/docker.sock agentic-gemini
+    docker run -it --rm -v /var/run/docker.sock:/var/run/docker.sock -v "/your/local/directory":"/my_files" agentic-gemini
     ```
 
 ### Local Development Setup (Optional)
