@@ -1,5 +1,26 @@
 # Release History
 
+* **v0.4:** Major expansion of `Mode 5` toolset, implementation of security guardrails, and strict code formatting compliance.
+
+    1.  **Extended File System Tools:**
+        
+        - Added `_create_file` and `_create_directory` for generating new assets.
+        - Added `_delete_item` for removing files and directories.
+        - Added `_copy_file`, `_cut_file`, and `_paste_file` to support clipboard-style file manipulation (copy/move).
+
+    2.  **Security & Guardrails:**
+        
+        - **Human-in-the-Loop Verification:** All destructive or creative operations (Write, Create, Delete, Copy, Cut, Paste) now require explicit user confirmation (`Type "YES" to confirm`) via the terminal to prevent accidental data loss.
+        - **Hidden File Protection:** Agents are strictly blocked from creating, editing, deleting, or copying hidden files and directories (those starting with `.`).
+
+    3.  **Code Formatting & Compliance:**
+        
+        - Converted tool methods to static methods to ensure compatibility with `autogen` registration while maintaining clipboard state.
+
+    4.  **STRESS_TEST:**
+        
+        - Added comprehensive test cases for file creation, safe deletion workflows, and clipboard (copy/cut/paste) operations.
+
 * **v0.3:** Updated `Mode 5` with interactive script execution, improved security, and file system stability.
 
     1.  **Interactive Script Execution (Mode 5):**

@@ -74,3 +74,30 @@ This mode tests the agent's ability to use its function tools to interact with t
 1.  **Find & Read:** Agent calls `_find_file_path('example.ipynb')` and `_read_file_content`, returning *only* the content from its code cells.
 2.  **Run (Expected Failure):** The agent explicitly refuses the execution command, citing the system prompt instruction that **only `.py` files can be executed**.
 3.  **Edit:** Agent calls `_write_file_content` to overwrite the notebook file with a new notebook containing a single code cell: `print("Notebook edited successfully.")`.
+
+### Test Case 4: Creation & Safe Deletion
+
+**Prompt:** `Create a new directory named 'sandbox_test' inside /my_files. Then, create a file named 'temp_data.py' inside that directory. Finally, delete the 'sandbox_test' directory and verify the deletion.`
+
+**Expected Outcome:**
+1.  **Creation:** Agent calls `_create_directory` and `_create_file`.
+    * *Verification:* User must type `YES` to authorize both creation steps.
+2.  **Deletion:** Agent calls `_delete_item` on the directory.
+    * *Verification:* User must type `YES` to authorize deletion.
+3.  **Result:** The agent confirms the directory is gone. The user should verify on the host system that `sandbox_test` no longer exists.
+
+---
+
+### Test Case 5: Clipboard Operations (Copy/Cut/Paste)
+
+**Prompt:** `Find 'example.py'. Copy it to the clipboard. Paste it into a new directory named 'backup_folder'. Then, cut the original 'example.py' and paste it into 'backup_folder' as well (this might require renaming if the agent handles it, or simply observing the overwrite/error behavior).`
+
+**Expected Outcome:**
+1.  **Copy:** Agent calls `_copy_file` on `example.py`.
+    * *Verification:* User must type `YES`.
+2.  **Paste:** Agent calls `_create_directory` (if 'backup_folder' doesn't exist) and then `_paste_file`.
+    * *Verification:* User must type `YES` for the paste operation.
+3.  **Cut:** Agent calls `_cut_file` on the original `example.py`.
+    * *Verification:* User must type `YES`.
+4.  **Paste (Move):** Agent calls `_paste_file` into `backup_folder`.
+    * *Verification:* User must type `YES`.
