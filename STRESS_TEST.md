@@ -6,9 +6,9 @@ This file provides a set of standard prompts to test the core functionality of e
 
 ## Mode 1: Basic Code Agent
 
-**Prompt:** `Plot a sine wave from 0 to 4*pi and save the plot to a file named 'sine_wave.png'.`
+**Prompt:** `Create a Python script for printing the first N numbers of the Fibonacci sequence where N is the input value from the terminal. Taking the role of the user, run this script for N=10.`
 
-**Expected Outcome:** The agent should write and execute Python code (using `matplotlib`) to generate the plot and save it to the `coding` directory.
+**Expected Outcome:** The agent should write a Python script to calculate the Fibonacci sequence, execute it with the input `10`, and print the resulting sequence (0, 1, 1, 2, 3, 5, 8, 13, 21, 34) to the terminal.
 
 ---
 
@@ -36,34 +36,41 @@ This file provides a set of standard prompts to test the core functionality of e
 
 ---
 
-## Mode 5: Tool Use Chat (File Operations)
+## Mode 5: Tool Use Chat (Find, Read, Edit, Run Files)
 
-*(Note: These prompts assume you have a `test.py`, `test.c`, and `test.ipynb` file in your mounted `/my_files` directory.)*
+This mode tests the agent's ability to use its function tools to interact with the host filesystem via the mounted `/my_files` directory.
 
-### Function: _find_file_path
-**Prompt:** `First, find the file 'test.py'.`
-**Expected Outcome:** Agent calls `_find_file_path('test.py')` and returns its relative path.
+**Note to User:** File names like `example.py`, `example.c`, and `example.ipynb` are **placeholders**. You must replace them with the actual names of files located in your mounted host directory to execute these tests.
 
-### Function: _read_file_content (.py)
-**Prompt:** `Read the contents of 'test.py'.`
-**Expected Outcome:** Agent finds and reads the file, returning its full text content.
+---
 
-### Function: _read_file_content (.c)
-**Prompt:** `What's inside the 'test.c' file?`
-**Expected Outcome:** Agent finds and reads the file, returning its full text content.
+### Test Case 1: Python (`.py`) Operations
 
-### Function: _read_file_content (.ipynb)
-**Prompt:** `Read the 'test.ipynb' notebook.`
-**Expected Outcome:** Agent finds and reads the file, returning *only* the content from its code cells.
+**Prompt:** `Find a file named 'example.py'. Read its contents, edit it to add a comment at the top: '# Edited by Agentic Gemini'. Finally, execute the modified script.`
 
-### Function: _write_file_content
-**Prompt:** `Find 'test.py', read it, and then edit it to add a comment at the top: '# This file was edited by an agent'.`
-**Expected Outcome:** Agent finds, reads, then calls `_write_file_content` to overwrite the file with the new comment and the original content.
+**Expected Outcome:**
+1.  **Find & Read:** Agent calls `_find_file_path('example.py')` and `_read_file_content`.
+2.  **Edit:** Agent successfully calls `_write_file_content` to overwrite the file with the new comment and the original content.
+3.  **Run (Execution):** Agent replies with a `sh` code block (e.g., `python3 "path/to/example.py"`) and the script executes successfully, printing its output.
 
-### Function: Run .py
-**Prompt:** `Run the 'test.py' script.`
-**Expected Outcome:** Agent finds the file and replies with a `sh` block (e.g., `python3 "test.py"`) for the executor to run.
+---
 
-### Function: Fail to Run .c (Expected)
-**Prompt:** `Find 'test.c' and run it.`
-**Expected Outcome:** The agent should state that it *cannot* run `.c` files, as per its instructions, and that it can only execute `.py` files. It should *not* attempt to run it.
+### Test Case 2: C (`.c`) Operations
+
+**Prompt:** `Find a file named 'example.c'. Read its contents. Then, try to run it.`
+
+**Expected Outcome:**
+1.  **Find & Read:** Agent calls `_find_file_path('example.c')` and `_read_file_content`, returning the file's content.
+2.  **Run (Expected Failure):** The agent explicitly refuses the execution command, citing the system prompt instruction that **only `.py` files can be executed**. The agent should *not* generate a `sh` code block for compilation or running.
+3.  **Edit (Optional but Permitted):** If the agent attempts to edit the file, it will succeed, as `.c` files are writable.
+
+---
+
+### Test Case 3: Jupyter Notebook (`.ipynb`) Operations
+
+**Prompt:** `Find a file named 'example.ipynb'. Read its contents, and then try to run it. If execution fails, edit the notebook by writing 'print("Notebook edited successfully.")' as the single code cell.`
+
+**Expected Outcome:**
+1.  **Find & Read:** Agent calls `_find_file_path('example.ipynb')` and `_read_file_content`, returning *only* the content from its code cells.
+2.  **Run (Expected Failure):** The agent explicitly refuses the execution command, citing the system prompt instruction that **only `.py` files can be executed**.
+3.  **Edit:** Agent calls `_write_file_content` to overwrite the notebook file with a new notebook containing a single code cell: `print("Notebook edited successfully.")`.

@@ -37,10 +37,11 @@ class AgenticGemini:
         assistant = AssistantAgent('assistant', llm_config=self.llm_config)
         user_proxy = UserProxyAgent(
             'user_proxy',
-            code_execution_config={'work_dir': 'coding', 'use_docker': True}
+            code_execution_config={'work_dir': 'coding', 'use_docker': False}
         )
 
         response = user_proxy.run(assistant, message=prompt)
+        
         response.process()
         self.logger.info('Final output:\n%s', response.summary)
 
@@ -58,8 +59,7 @@ class AgenticGemini:
 
         reviewer = ConversableAgent(
             name='reviewer',
-            system_message='You are a code reviewer. Analyze provided code and suggest improvements. '
-                           'Do not generate code, only suggest improvements.',
+            system_message='You are a code reviewer. Analyze provided code and suggest improvements. Do not generate code, only suggest improvements.',
             llm_config=self.llm_config,
         )
 
@@ -68,6 +68,7 @@ class AgenticGemini:
             message=prompt,
             max_turns=self.max_calls
         )
+        
         response.process()
         self.logger.info('Final output:\n%s', response.summary)
 
@@ -113,6 +114,7 @@ class AgenticGemini:
             messages=prompt,
             max_rounds=self.max_calls,
         )
+        
         response.process()
         self.logger.info('Final output:\n%s', response.summary)
 
@@ -168,6 +170,7 @@ class AgenticGemini:
             messages=prompt,
             max_rounds=self.max_calls,
         )
+        
         response.process()
         self.logger.info('Final output:\n%s', response.summary)
 
@@ -180,7 +183,7 @@ class AgenticGemini:
     def _get_absolute_path(relative_path: str) -> str:
         
         base_dir = '/my_files'
-        
+
         if relative_path.startswith('/'):
             relative_path = relative_path[1:]
         
@@ -191,16 +194,17 @@ class AgenticGemini:
         
         directory_path = '/my_files'
         ext = os.path.splitext(file_name)[1]
-        
-        if ext not in AgenticGemini._get_allowed_extensions():
-            
+
+        if ext not in AgenticGemini._get_allowed_extensions():            
             return f'Error: File type {ext} is not allowed. Only .py, .c, and .ipynb are supported.'
         
-        if not os.path.isdir(directory_path):
-            
+        if not os.path.isdir(directory_path):            
             return f'Error: Search directory not found or is not a directory: {directory_path}'
         
         for root, dirs, files in os.walk(directory_path):
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
+            files = [f for f in files if not f.startswith('.')]
+            
             if file_name in files:
                 full_path = os.path.join(root, file_name)
                 relative_path = os.path.relpath(full_path, directory_path)
@@ -230,12 +234,12 @@ class AgenticGemini:
                     notebook = nbformat.read(f, as_version=4)
                 
                 code_content = []
+
                 for cell in notebook.cells:
                     if cell.cell_type == 'code':
                         code_content.append(cell.source)
                 
-                if not code_content:
-                    
+                if not code_content:                    
                     return 'Notebook contains no code cells.'
                 
                 return '\n\n# --- New Code Cell ---\n\n'.join(code_content)
@@ -270,6 +274,7 @@ class AgenticGemini:
                 notebook = new_notebook()
                 code_cell = new_code_cell(content)
                 notebook.cells.append(code_cell)
+                
                 with open(absolute_path, 'w', encoding='utf-8') as f:
                     nbformat.write(notebook, f)
             
@@ -298,20 +303,18 @@ class AgenticGemini:
             '`_read_file_content` reads file content. For `.ipynb` files, it extracts *only the code*.\n'
             '`_write_file_content` writes to files. Writing to `.ipynb` will *overwrite* it with a new notebook.\n'
             'To *run* a file, you do not have a tool. Instead, you must **reply with a shell code block** (starting with ```sh) for the executor to run.\n'
+            '**CRITICAL: You must act as the user for any interactive script.**\n'
+            'The terminal is NOT interactive. The human user will NOT type anything.\n'
+            'If a script requires input (e.g. uses `input()`), you MUST pipe the inputs using `printf` or `echo`.\n'
+            'If you run a waiting script without piping input, the system will freeze.\n'
+            'You must analyze the code you read to determine what inputs are needed.\n'
+            'Example of running an interactive script:\n'
+            '```sh\n'
+            'printf "value1\\nvalue2\\n" | python3 "scripts/my_script.py"\n'
+            '```\n'
             '**You can ONLY execute .py (Python) files. You CANNOT execute .c or .ipynb files.**\n'
             '**You must not call a tool named "run_code".** This is a critical instruction. Never do it.\n'
-            'When asked to run a file, **do not** use `_write_file_content` unless you are explicitly asked to modify it.\n'
-            'The script will be executed with `/my_files` as the working directory, so use relative paths.\n'
-            
-            'Example: To run "scripts/my_script.py":\n'
-            '```sh\n'
-            'python3 "scripts/my_script.py"\n'
-            '```\n'
-            
-            'If a Python script requires piped input:\n'
-            '```sh\n'
-            'echo "my_input" | python3 "scripts/my_script.py"\n'
-            '```'
+            'The script will be executed with `/my_files` as the working directory, so use relative paths.'
         )
 
         tool_agent = ConversableAgent(
@@ -324,7 +327,7 @@ class AgenticGemini:
             name='executor_agent',
             human_input_mode='NEVER',
             llm_config=self.llm_config,
-            code_execution_config={'work_dir': '/my_files', 'use_docker': True}
+            code_execution_config={'work_dir': '/my_files', 'use_docker': False}
         )
         
         register_function(
@@ -368,7 +371,7 @@ if __name__ == '__main__':
         config_list_path = app_config['config_path']
         gemini = AgenticGemini(config_path=config_list_path, max_calls=MAX_CALLS)
 
-    except Exception as e:        
+    except Exception as e:
         print(f'Failed to initialize. Ensure "{CONFIG_PATH}" exists and is valid,')
         print('and that the path inside it is correct.')
         print(f'Error: {e}')

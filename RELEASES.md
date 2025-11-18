@@ -1,5 +1,25 @@
 # Release History
 
+* **v0.3:** Updated `Mode 5` with interactive script execution, improved security, and file system stability.
+
+    1.  **Interactive Script Execution (Mode 5):**
+
+        - The agent can now execute interactive Python scripts (using `input()`) by "acting as the user" and piping inputs via `printf` or `echo`.
+        - System prompt updated to enforce this behavior, preventing terminal freezing during execution.
+
+    2.  **Docker Execution Strategy:**
+
+        - Switched execution to run directly inside the active container (`use_docker=False`) instead of spawning sibling containers.
+        - This resolves the issue of root-owned "locked" files being created on the host system.
+
+    3.  **File Search Improvements:**
+
+        - `_find_file_path` now deterministically filters out hidden files and directories (starting with `.`) to improve safety and reduce clutter.
+
+    4.  **STRESS_TEST:**
+
+        - Refined stress test scenarios - for modes *1* and *5* - to ensure a more precise and targeted validation of agent capabilities.
+
 * **v0.2:** Added new function tools for `mode 5`. Updated requirements.txt. Updated system prompts. Added STRESS_TEST.
 
     1.  New Function Tools (Mode 5):
