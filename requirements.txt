@@ -1,2 +1,4 @@
 ag2[gemini]
 nbformat
+pypdf
+python-docx

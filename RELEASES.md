@@ -1,5 +1,21 @@
 # Release History
 
+* **v0.6:** Expanded file compatibility, intelligent search, and safety limits.
+
+    1.  **Expanded File Support:**
+        
+        - Added support for reading `.pdf` (via `pypdf`) and `.docx` (via `python-docx`) files.
+        - The agent can now ingest and process complex document formats alongside code files.
+
+    2.  **Intelligent File Search:**
+        
+        - `_find_file_path` now employs fuzzy matching logic. It ignores casing and common separators (`_`, `-`, ` `), allowing the agent to successfully locate files like "Example File.txt" even when searching for variations like "example_file.txt" or "examplefile".
+
+    3.  **Safety & Performance Limits:**
+        
+        - `_read_file_content` now enforces a strict character limit of 65,536 characters per read operation.
+        - This prevents large documents from overflowing the context window. Truncated outputs are automatically flagged with a warning message.
+
 * **v0.5:** Implemented non-root container execution for better file permissions and added early termination logic to `Mode 5` for API efficiency.
 
     1.  **Docker Security (Non-Root User):**

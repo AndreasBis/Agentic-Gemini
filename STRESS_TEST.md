@@ -75,6 +75,8 @@ This mode tests the agent's ability to use its function tools to interact with t
 2.  **Run (Expected Failure):** The agent explicitly refuses the execution command, citing the system prompt instruction that **only `.py` files can be executed**.
 3.  **Edit:** Agent calls `_write_file_content` to overwrite the notebook file with a new notebook containing a single code cell: `print("Notebook edited successfully.")`.
 
+---
+
 ### Test Case 4: Creation & Safe Deletion
 
 **Prompt:** `Create a new directory named 'sandbox_test' inside /my_files. Then, create a file named 'temp_data.py' inside that directory. Finally, delete the 'sandbox_test' directory and verify the deletion.`
@@ -101,3 +103,14 @@ This mode tests the agent's ability to use its function tools to interact with t
     * *Verification:* User must type `YES`.
 4.  **Paste (Move):** Agent calls `_paste_file` into `backup_folder`.
     * *Verification:* User must type `YES`.
+
+---
+
+### Test Case 6: Document Reading & Summarization
+
+**Prompt:** `Find 'example.pdf' and summarize the first 10 pages.`
+
+**Expected Outcome:**
+1.  **Find & Read:** Agent calls `_find_file_path` (demonstrating the new fuzzy matching capabilities) and `_read_file_content`.
+2.  **Read Limit:** If the document exceeds the 65,536 character limit, the agent receives the truncated content with a warning tag appended.
+3.  **Summarization:** The agent processes the text extracted from the PDF and generates a concise summary of the first 10 pages (or the available truncated content).

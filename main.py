@@ -4,7 +4,6 @@ import os
 import shutil
 import nbformat
 from nbformat.v4 import new_notebook, new_code_cell
-from datetime import datetime
 from typing import Annotated
 
 from autogen import (
@@ -179,7 +178,12 @@ class AgenticGemini:
         self.logger.info('Final output:\n%s', response.summary)
 
     @staticmethod
-    def _get_allowed_extensions() -> set:
+    def _get_readable_extensions() -> set:
+
+        return {'.py', '.c', '.ipynb', '.txt', '.md', '.json', '.csv', '.html', '.css', '.js', '.docx', '.pdf'}
+
+    @staticmethod
+    def _get_editable_extensions() -> set:
 
         return {'.py', '.c', '.ipynb'}
 
@@ -194,45 +198,62 @@ class AgenticGemini:
         return os.path.normpath(os.path.join(base_dir, relative_path))
 
     @staticmethod
-    def _find_file_path(file_name: Annotated[str, 'The name of the file to find, e.g., main.c']) -> str:
+    def _find_file_path(file_name: Annotated[str, 'The name (or partial name) of the file to find, e.g., main.c or GitHub Recovery Codes']) -> str:
 
         directory_path = '/my_files'
-        ext = os.path.splitext(file_name)[1]
-
-        if ext not in AgenticGemini._get_allowed_extensions():
-            return f'Error: File type {ext} is not allowed. Only .py, .c, and .ipynb are supported.'
+        target_base, target_ext = os.path.splitext(file_name)
+        normalized_target = target_base.lower().replace('_', '').replace('-', '').replace(' ', '')
 
         if not os.path.isdir(directory_path):
+
             return f'Error: Search directory not found or is not a directory: {directory_path}'
+
+        found_files = []
 
         for root, dirs, files in os.walk(directory_path):
             dirs[:] = [d for d in dirs if not d.startswith('.')]
             files = [f for f in files if not f.startswith('.')]
 
-            if file_name in files:
-                full_path = os.path.join(root, file_name)
-                relative_path = os.path.relpath(full_path, directory_path)
+            for f in files:
+                f_base, f_ext = os.path.splitext(f)
+                normalized_f = f_base.lower().replace('_', '').replace('-', '').replace(' ', '')
 
-                return relative_path
+                if normalized_target in normalized_f:
+                    if target_ext and target_ext != f_ext:
+                        continue
 
-        return f'Error: File not found: {file_name} within {directory_path}'
+                    full_path = os.path.join(root, f)
+                    relative_path = os.path.relpath(full_path, directory_path)
+                    found_files.append(relative_path)
+
+        if not found_files:
+
+            return f'Error: No files found matching: {file_name} (or variations) within {directory_path}'
+
+        return '\n'.join(found_files)
 
     @staticmethod
     def _read_file_content(relative_path: Annotated[str, 'The relative path from /my_files']) -> str:
 
         absolute_path = AgenticGemini._get_absolute_path(relative_path)
         ext = os.path.splitext(absolute_path)[1]
+        char_limit = 65536
 
-        if ext not in AgenticGemini._get_allowed_extensions():
-            return f'Error: File type {ext} is not allowed. Only .py, .c, and .ipynb are supported.'
+        if ext not in AgenticGemini._get_readable_extensions():
+
+            return f'Error: File type {ext} is not allowed. Supported types: {AgenticGemini._get_readable_extensions()}'
 
         if not absolute_path.startswith('/my_files'):
+
             return 'Error: Path traversal detected. Access denied.'
 
         if not os.path.exists(absolute_path):
+
             return f'Error: File not found at path: {absolute_path}'
 
         try:
+            content = ''
+
             if ext == '.ipynb':
                 with open(absolute_path, 'r', encoding='utf-8') as f:
                     notebook = nbformat.read(f, as_version=4)
@@ -244,17 +265,48 @@ class AgenticGemini:
                         code_content.append(cell.source)
 
                 if not code_content:
+
                     return 'Notebook contains no code cells.'
 
-                return '\n\n# --- New Code Cell ---\n\n'.join(code_content)
+                content = '\n\n# --- New Code Cell ---\n\n'.join(code_content)
+
+            elif ext == '.pdf':
+                try:
+                    import pypdf
+                    reader = pypdf.PdfReader(absolute_path)
+                    pages_text = []
+                    for page in reader.pages:
+                        text = page.extract_text()
+                        if text:
+                            pages_text.append(text)
+                    content = '\n'.join(pages_text)
+
+                except ImportError:
+
+                    return 'Error: pypdf library not installed. Cannot read .pdf files.'
+
+            elif ext == '.docx':
+                try:
+                    import docx
+                    doc = docx.Document(absolute_path)
+                    content = '\n'.join([p.text for p in doc.paragraphs])
+
+                except ImportError:
+
+                    return 'Error: python-docx library not installed. Cannot read .docx files.'
 
             else:
                 with open(absolute_path, 'r') as f:
                     content = f.read()
 
-                return content
+            if len(content) > char_limit:
+                warning = f'\n\n[WARNING: Content truncated. Original size > {char_limit} characters (~8192 tokens).]'
+                return content[:char_limit] + warning
+
+            return content
 
         except Exception as e:
+
             return f'Error reading file: {str(e)}'
 
     @staticmethod
@@ -264,19 +316,23 @@ class AgenticGemini:
         absolute_path = AgenticGemini._get_absolute_path(relative_path)
         ext = os.path.splitext(absolute_path)[1]
 
-        if ext not in AgenticGemini._get_allowed_extensions():
-            return f'Error: File type {ext} is not allowed. Only .py, .c, and .ipynb are supported.'
+        if ext not in AgenticGemini._get_editable_extensions():
+
+            return f'Error: File type {ext} is not writable. Only .py, .c, and .ipynb are editable.'
 
         if not absolute_path.startswith('/my_files'):
+
             return 'Error: Path traversal detected. Access denied.'
 
         if os.path.basename(absolute_path).startswith('.'):
+
             return 'Error: Cannot edit hidden files.'
 
         print(f'VERIFICATION REQUIRED: Agent wants to OVERWRITE/EDIT file: {absolute_path}')
         user_verification = input('Type "YES" to confirm: ')
 
         if user_verification != 'YES':
+
             return 'Error: User denied the operation.'
 
         try:
@@ -297,6 +353,7 @@ class AgenticGemini:
             return f'Successfully wrote to {absolute_path}'
 
         except Exception as e:
+
             return f'Error writing file: {str(e)}'
 
     @staticmethod
@@ -305,19 +362,23 @@ class AgenticGemini:
         absolute_path = AgenticGemini._get_absolute_path(relative_path)
         ext = os.path.splitext(absolute_path)[1]
 
-        if ext not in AgenticGemini._get_allowed_extensions():
-            return f'Error: File type {ext} is not allowed. Only .py, .c, and .ipynb are supported.'
+        if ext not in AgenticGemini._get_editable_extensions():
+
+            return f'Error: Cannot create file type {ext}. Only .py, .c, and .ipynb are supported for creation.'
 
         if not absolute_path.startswith('/my_files'):
+
             return 'Error: Path traversal detected. Access denied.'
 
         if os.path.basename(absolute_path).startswith('.'):
+
             return 'Error: Cannot create hidden files.'
 
         print(f'VERIFICATION REQUIRED: Agent wants to CREATE file: {absolute_path}')
         user_verification = input('Type "YES" to confirm: ')
 
         if user_verification != 'YES':
+
             return 'Error: User denied the operation.'
 
         try:
@@ -329,6 +390,7 @@ class AgenticGemini:
             return f'Successfully created file {absolute_path}'
 
         except Exception as e:
+
             return f'Error creating file: {str(e)}'
 
     @staticmethod
@@ -337,15 +399,18 @@ class AgenticGemini:
         absolute_path = AgenticGemini._get_absolute_path(relative_path)
 
         if not absolute_path.startswith('/my_files'):
+
             return 'Error: Path traversal detected. Access denied.'
 
         if os.path.basename(absolute_path).startswith('.'):
+
             return 'Error: Cannot create hidden directories.'
 
         print(f'VERIFICATION REQUIRED: Agent wants to CREATE directory: {absolute_path}')
         user_verification = input('Type "YES" to confirm: ')
 
         if user_verification != 'YES':
+
             return 'Error: User denied the operation.'
 
         try:
@@ -354,6 +419,7 @@ class AgenticGemini:
             return f'Successfully created directory {absolute_path}'
 
         except Exception as e:
+
             return f'Error creating directory: {str(e)}'
 
     @staticmethod
@@ -362,18 +428,22 @@ class AgenticGemini:
         absolute_path = AgenticGemini._get_absolute_path(relative_path)
 
         if not absolute_path.startswith('/my_files'):
+
             return 'Error: Path traversal detected. Access denied.'
 
         if os.path.basename(absolute_path).startswith('.'):
+
             return 'Error: Cannot delete hidden files or directories.'
 
         if not os.path.exists(absolute_path):
+
             return f'Error: Path not found: {absolute_path}'
 
         print(f'VERIFICATION REQUIRED: Agent wants to DELETE: {absolute_path}')
         user_verification = input('Type "YES" to confirm: ')
 
         if user_verification != 'YES':
+
             return 'Error: User denied the operation.'
 
         try:
@@ -385,6 +455,7 @@ class AgenticGemini:
             return f'Successfully deleted {absolute_path}'
 
         except Exception as e:
+
             return f'Error deleting item: {str(e)}'
 
     @staticmethod
@@ -393,18 +464,22 @@ class AgenticGemini:
         absolute_path = AgenticGemini._get_absolute_path(relative_path)
 
         if not absolute_path.startswith('/my_files'):
+
             return 'Error: Path traversal detected. Access denied.'
 
         if os.path.basename(absolute_path).startswith('.'):
+
             return 'Error: Cannot copy hidden files or directories.'
 
         if not os.path.exists(absolute_path):
+
             return f'Error: Path not found: {absolute_path}'
 
         print(f'VERIFICATION REQUIRED: Agent wants to COPY to clipboard: {absolute_path}')
         user_verification = input('Type "YES" to confirm: ')
 
         if user_verification != 'YES':
+
             return 'Error: User denied the operation.'
 
         AgenticGemini._clipboard_src = absolute_path
@@ -418,18 +493,22 @@ class AgenticGemini:
         absolute_path = AgenticGemini._get_absolute_path(relative_path)
 
         if not absolute_path.startswith('/my_files'):
+
             return 'Error: Path traversal detected. Access denied.'
 
         if os.path.basename(absolute_path).startswith('.'):
+
             return 'Error: Cannot cut hidden files or directories.'
 
         if not os.path.exists(absolute_path):
+
             return f'Error: Path not found: {absolute_path}'
 
         print(f'VERIFICATION REQUIRED: Agent wants to CUT to clipboard: {absolute_path}')
         user_verification = input('Type "YES" to confirm: ')
 
         if user_verification != 'YES':
+
             return 'Error: User denied the operation.'
 
         AgenticGemini._clipboard_src = absolute_path
@@ -441,14 +520,17 @@ class AgenticGemini:
     def _paste_file(relative_destination_path: Annotated[str, 'The destination path to paste the clipboard item']) -> str:
 
         if not AgenticGemini._clipboard_src or not AgenticGemini._clipboard_op:
+
             return 'Error: Clipboard is empty. Use copy_file or cut_file first.'
 
         dest_path = AgenticGemini._get_absolute_path(relative_destination_path)
 
         if not dest_path.startswith('/my_files'):
+
             return 'Error: Path traversal detected. Access denied.'
 
         if os.path.basename(dest_path).startswith('.'):
+
             return 'Error: Cannot paste to hidden files or directories.'
 
         if not os.path.exists(AgenticGemini._clipboard_src):
@@ -461,6 +543,7 @@ class AgenticGemini:
         user_verification = input('Type "YES" to confirm: ')
 
         if user_verification != 'YES':
+
             return 'Error: User denied the operation.'
 
         try:
@@ -484,6 +567,7 @@ class AgenticGemini:
             return 'Error: Unknown clipboard operation.'
 
         except Exception as e:
+
             return f'Error pasting item: {str(e)}'
 
     def run_tool_use_chat(self):
@@ -495,17 +579,18 @@ class AgenticGemini:
         )
 
         system_message = (
-            'You are an assistant that uses tools. You can only interact with files ending in `.py`, `.c`, or `.ipynb`.\n'
+            'You are an assistant that uses tools. You can interact with text-based files (e.g., .py, .c, .ipynb, .txt, .md, .json, .csv, .html, .css, .js) and document files (.pdf, .docx).\n'
             'You have 9 tools: `_find_file_path`, `_read_file_content`, `_write_file_content`, `_create_file`, `_create_directory`, `_delete_item`, `_copy_file`, `_cut_file`, `_paste_file`.\n'
             'All file tools operate on the `/my_files` directory.\n'
             'Dangerous operations (Write, Create, Delete, Copy, Cut, Paste) will prompt the user for manual verification. If denied, handle the error gracefully.\n'
-            '`_find_file_path` returns a relative path. Hidden files are ignored.\n'
+            '`_find_file_path` returns relative paths. Hidden files are ignored. It automatically searches for casing/separator variations.\n'
+            '`_read_file_content` has a limit of ~8k tokens. Larger files are truncated.\n'
             '`_delete_item` permanently removes files or directories. Hidden files cannot be deleted.\n'
             'To move or copy files, use the clipboard: `_copy_file`/`_cut_file` -> `_paste_file`.\n'
             'To *run* a file, you do not have a tool. Instead, you must **reply with a shell code block** (starting with ```sh) for the executor to run.\n'
             '**CRITICAL: You must act as the user for any interactive script.**\n'
             'If a script requires input, pipe it using `printf` or `echo`.\n'
-            '**You can ONLY execute .py (Python) files. You CANNOT execute .c or .ipynb files.**\n'
+            '**You can execute .py, .c, and .ipynb files.**\n'
             '**You must not call a tool named "run_code".**\n'
             '**Do NOT use shell commands for file manipulation (rm, mkdir, touch, cp, mv). Use the provided tools.**\n'
             'The script will be executed with `/my_files` as the working directory, so use relative paths.\n'
@@ -530,14 +615,14 @@ class AgenticGemini:
             self._find_file_path,
             caller=tool_agent,
             executor=executor_agent,
-            description='Find the relative path of a file (must be .py, .c, or .ipynb) by searching the /my_files directory',
+            description='Find the relative path(s) of files matching the name/pattern in /my_files. Supports automatic fuzzy matching for separators and casing.',
         )
 
         register_function(
             self._read_file_content,
             caller=tool_agent,
             executor=executor_agent,
-            description='Read the content of a file, given its relative path. Special handling for .ipynb to extract code.',
+            description='Read the content of a file. Supports .py, .c, .ipynb, .txt, .md, .json, .csv, .pdf, .docx, etc. Content truncated at ~8k tokens.',
         )
 
         register_function(
