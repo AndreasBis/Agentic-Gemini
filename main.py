@@ -508,7 +508,8 @@ class AgenticGemini:
             '**You can ONLY execute .py (Python) files. You CANNOT execute .c or .ipynb files.**\n'
             '**You must not call a tool named "run_code".**\n'
             '**Do NOT use shell commands for file manipulation (rm, mkdir, touch, cp, mv). Use the provided tools.**\n'
-            'The script will be executed with `/my_files` as the working directory, so use relative paths.'
+            'The script will be executed with `/my_files` as the working directory, so use relative paths.\n'
+            'When the operation is successful and the task is done, reply with TERMINATE.'
         )
 
         tool_agent = ConversableAgent(
@@ -521,7 +522,8 @@ class AgenticGemini:
             name='executor_agent',
             human_input_mode='NEVER',
             llm_config=self.llm_config,
-            code_execution_config={'work_dir': '/my_files', 'use_docker': False}
+            code_execution_config={'work_dir': '/my_files', 'use_docker': False},
+            is_termination_msg=lambda x: 'TERMINATE' in (x.get('content', '') or '').upper()
         )
 
         register_function(

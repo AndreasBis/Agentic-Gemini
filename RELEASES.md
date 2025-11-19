@@ -1,5 +1,17 @@
 # Release History
 
+* **v0.5:** Implemented non-root container execution for better file permissions and added early termination logic to `Mode 5` for API efficiency.
+
+    1.  **Docker Security (Non-Root User):**
+        
+        - Updated `Dockerfile` to create and run as a dedicated user `agentuser` (UID 1000) instead of `root`.
+        - Files created by the agent in the mounted volume are now owned by the host user, resolving "locked file" permission errors on the host system.
+
+    2.  **API Efficiency (Mode 5):**
+        
+        - Updated system prompt to instruct the agent to reply with `TERMINATE` upon task completion.
+        - Added `is_termination_msg` check to `executor_agent` to immediately stop the chat loop, preventing unnecessary token usage from redundant conversation.
+
 * **v0.4:** Major expansion of `Mode 5` toolset, implementation of security guardrails, and strict code formatting compliance.
 
     1.  **Extended File System Tools:**
