@@ -2,10 +2,11 @@ import logging
 import json
 import os
 import shutil
+import re
 import nbformat
-from nbformat.v4 import new_notebook, new_code_cell
+import pypdf
+from nbformat.v4 import new_notebook, new_code_cell, new_markdown_cell
 from typing import Annotated
-
 from autogen import (
     AssistantAgent,
     UserProxyAgent,
@@ -233,7 +234,20 @@ class AgenticGemini:
         return '\n'.join(found_files)
 
     @staticmethod
-    def _read_file_content(relative_path: Annotated[str, 'The relative path from /my_files']) -> str:
+    def _flatten_pdf_outline(outline):
+
+        flat_list = []
+        for item in outline:
+            if isinstance(item, list):
+                flat_list.extend(AgenticGemini._flatten_pdf_outline(item))
+            else:
+                flat_list.append(item)
+
+        return flat_list
+
+    @staticmethod
+    def _read_file_content(relative_path: Annotated[str, 'The relative path from /my_files'],
+                           chapter: Annotated[str, 'The specific chapter title to read (PDF only)'] = None) -> str:
 
         absolute_path = AgenticGemini._get_absolute_path(relative_path)
         ext = os.path.splitext(absolute_path)[1]
@@ -258,32 +272,55 @@ class AgenticGemini:
                 with open(absolute_path, 'r', encoding='utf-8') as f:
                     notebook = nbformat.read(f, as_version=4)
 
-                code_content = []
+                content_parts = []
 
                 for cell in notebook.cells:
                     if cell.cell_type == 'code':
-                        code_content.append(cell.source)
+                        content_parts.append(f'# --- CELL: CODE ---\n{cell.source}')
+                    elif cell.cell_type == 'markdown':
+                        content_parts.append(f'# --- CELL: MARKDOWN ---\n{cell.source}')
 
-                if not code_content:
+                if not content_parts:
 
-                    return 'Notebook contains no code cells.'
+                    return 'Notebook contains no cells.'
 
-                content = '\n\n# --- New Code Cell ---\n\n'.join(code_content)
+                content = '\n\n'.join(content_parts)
 
             elif ext == '.pdf':
                 try:
-                    import pypdf
                     reader = pypdf.PdfReader(absolute_path)
+                    start_page = 0
+                    end_page = len(reader.pages)
+
+                    if chapter:
+                        outline = AgenticGemini._flatten_pdf_outline(reader.outline)
+                        found_chapter = False
+
+                        for i, node in enumerate(outline):
+                            if chapter.lower() in node.title.lower():
+                                try:
+                                    start_page = reader.get_destination_page_number(node)
+                                    found_chapter = True
+                                    if i + 1 < len(outline):
+                                        end_page = reader.get_destination_page_number(outline[i + 1])
+                                    break
+                                except Exception:
+                                    continue
+
+                        if not found_chapter:
+
+                            return f'Error: Chapter "{chapter}" not found in PDF outline.'
+
                     pages_text = []
-                    for page in reader.pages:
-                        text = page.extract_text()
+                    for i in range(start_page, end_page):
+                        text = reader.pages[i].extract_text()
                         if text:
                             pages_text.append(text)
                     content = '\n'.join(pages_text)
 
-                except ImportError:
+                except Exception as e:
 
-                    return 'Error: pypdf library not installed. Cannot read .pdf files.'
+                    return f'Error reading PDF: {str(e)}'
 
             elif ext == '.docx':
                 try:
@@ -340,8 +377,19 @@ class AgenticGemini:
 
             if ext == '.ipynb':
                 notebook = new_notebook()
-                code_cell = new_code_cell(content)
-                notebook.cells.append(code_cell)
+                segments = re.split(r'(# --- CELL: (?:CODE|MARKDOWN) ---)', content)
+                iter_segments = iter(segments)
+                first_segment = next(iter_segments, '')
+
+                if first_segment.strip():
+                    notebook.cells.append(new_code_cell(first_segment.strip()))
+
+                for delimiter in iter_segments:
+                    cell_source = next(iter_segments, '').strip()
+                    if 'MARKDOWN' in delimiter:
+                        notebook.cells.append(new_markdown_cell(cell_source))
+                    else:
+                        notebook.cells.append(new_code_cell(cell_source))
 
                 with open(absolute_path, 'w', encoding='utf-8') as f:
                     nbformat.write(notebook, f)
@@ -585,6 +633,7 @@ class AgenticGemini:
             'Dangerous operations (Write, Create, Delete, Copy, Cut, Paste) will prompt the user for manual verification. If denied, handle the error gracefully.\n'
             '`_find_file_path` returns relative paths. Hidden files are ignored. It automatically searches for casing/separator variations.\n'
             '`_read_file_content` has a limit of ~8k tokens. Larger files are truncated.\n'
+            'For PDF files, you can read a specific chapter by providing the `chapter` argument (matches bookmarks).\n'
             '`_delete_item` permanently removes files or directories. Hidden files cannot be deleted.\n'
             'To move or copy files, use the clipboard: `_copy_file`/`_cut_file` -> `_paste_file`.\n'
             'To *run* a file, you do not have a tool. Instead, you must **reply with a shell code block** (starting with ```sh) for the executor to run.\n'
@@ -593,6 +642,12 @@ class AgenticGemini:
             '**You can execute .py, .c, and .ipynb files.**\n'
             '**You must not call a tool named "run_code".**\n'
             '**Do NOT use shell commands for file manipulation (rm, mkdir, touch, cp, mv). Use the provided tools.**\n'
+            'For `.ipynb` files, the `content` argument in `_write_file_content` must be the **raw content string**, NOT a JSON object.\n'
+            'To create multiple cells in a notebook, you MUST separate them with these specific delimiters:\n'
+            'For Code Cells: `# --- CELL: CODE ---`\n'
+            'For Markdown Cells: `# --- CELL: MARKDOWN ---`\n'
+            'Example:\n'
+            '`# --- CELL: MARKDOWN ---\n# Analysis\nHere is the analysis.\n# --- CELL: CODE ---\nprint("Hello")`\n'
             'The script will be executed with `/my_files` as the working directory, so use relative paths.\n'
             'When the operation is successful and the task is done, reply with TERMINATE.'
         )
@@ -622,7 +677,7 @@ class AgenticGemini:
             self._read_file_content,
             caller=tool_agent,
             executor=executor_agent,
-            description='Read the content of a file. Supports .py, .c, .ipynb, .txt, .md, .json, .csv, .pdf, .docx, etc. Content truncated at ~8k tokens.',
+            description='Read the content of a file. Supports .py, .c, .ipynb, .txt, .md, .json, .csv, .pdf, .docx, etc. Content truncated at ~8k tokens. Can read specific PDF chapters.',
         )
 
         register_function(

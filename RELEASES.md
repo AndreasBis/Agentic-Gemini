@@ -1,5 +1,18 @@
 # Release History
 
+* **v0.7:** Targeted PDF reading and enhanced Jupyter Notebook manipulation.
+
+    1.  **Targeted PDF Chapter Reading:**
+        
+        - `_read_file_content` now accepts a `chapter` argument, enabling the agent to locate and extract specific sections based on PDF bookmarks (outline).
+        - This allows for processing large documents chapter-by-chapter, preventing context window overflow.
+
+    2.  **Advanced Notebook Editing:**
+        
+        - Implemented full support for creating and editing multi-cell Jupyter Notebooks (`.ipynb`) containing both Code and Markdown cells.
+        - Introduced a delimiter-based syntax (`# --- CELL: CODE ---` and `# --- CELL: MARKDOWN ---`) to allow reliable generation of complex notebooks in a single pass.
+        - Resolved serialization issues where the agent previously attempted to write JSON objects instead of raw Python code.
+
 * **v0.6:** Expanded file compatibility, intelligent search, and safety limits.
 
     1.  **Expanded File Support:**
